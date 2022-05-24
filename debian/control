@@ -16,6 +16,7 @@ Architecture: amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}, libconfuse2
 Recommends:
  dd,
+ fakeroot,
  e2fsprogs,
 Suggests:
  genext2fs,
