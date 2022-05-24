@@ -1,0 +1,11 @@
+/genimage
+
+/debhelper-build-stamp
+/autoreconf.after
+/autoreconf.before
+
+/files
+/tmp
+/.debhelper
+*.substvars
+*.log

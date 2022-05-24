@@ -1,0 +1,39 @@
+Source: genimage
+Section: misc
+Priority: optional
+Maintainer: André Erdmann <dywi@mailerd.de>
+Standards-Version: 4.5.1
+Build-Depends: debhelper (>= 12),
+ dpkg-dev (>= 1.16.1.1),
+ autoconf,
+ pkgconf,
+ libconfuse-dev
+
+Package: genimage
+# genimage might run on other architectures as well, not tested
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, libconfuse2
+Recommends:
+ dd,
+ e2fsprogs,
+Suggests:
+ genext2fs,
+ genisoimage,
+ mtools,
+# mkcramfs
+ dosfstools,
+ mtd-utils,
+ squashfs-tools,
+ qemu-utils,
+ rauc,
+ u-boot-tools,
+Description: tool to generate multiple filesystem and flash images from a tree
+ genimage is a tool to generate multiple filesystem
+ and flash/disk images from a given root filesystem tree.
+ genimage is intended to be run in a fakeroot environment.
+ It also supports creating flash/disk images
+ out of different file-system images and files.
+ .
+ Configuration is done in a config file parsed by libconfuse.
+ Options like the path to tools can be given via environment variables,
+ the config file or from commandline switches.
