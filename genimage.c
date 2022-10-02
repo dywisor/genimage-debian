@@ -44,8 +44,10 @@ static struct image_handler *handlers[] = {
 	&ext2_handler,
 	&ext3_handler,
 	&ext4_handler,
+	&f2fs_handler,
 	&file_handler,
 	&fit_handler,
+	&fip_handler,
 	&flash_handler,
 	&hdimage_handler,
 	&iso_handler,
@@ -110,6 +112,7 @@ static cfg_opt_t image_common_opts[] = {
 	CFG_STR("name", NULL, CFGF_NONE),
 	CFG_STR("size", NULL, CFGF_NONE),
 	CFG_STR("mountpoint", NULL, CFGF_NONE),
+	CFG_STR("srcpath", NULL, CFGF_NONE),
 	CFG_BOOL("empty", cfg_false, CFGF_NONE),
 	CFG_BOOL("temporary", cfg_false, CFGF_NONE),
 	CFG_STR("exec-pre", NULL, CFGF_NONE),
@@ -195,6 +198,74 @@ static int image_setup(struct image *image)
 	return 0;
 }
 
+static int overwriteenv(const char *name, const char *value)
+{
+	int ret;
+
+	ret = setenv(name, value ? : "", 1);
+	if (ret)
+		return -errno;
+
+	return 0;
+}
+
+static int setenv_paths(void)
+{
+	int ret;
+
+	ret = overwriteenv("OUTPUTPATH", imagepath());
+	if (ret)
+		return ret;
+
+	ret = overwriteenv("INPUTPATH", inputpath());
+	if (ret)
+		return ret;
+
+	ret = overwriteenv("ROOTPATH", rootpath());
+	if (ret)
+		return ret;
+
+	ret = overwriteenv("TMPPATH", tmppath());
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int setenv_image(const struct image *image)
+{
+	int ret;
+	char sizestr[20];
+
+	snprintf(sizestr, sizeof(sizestr), "%llu", image->size);
+
+	ret = overwriteenv("IMAGE", image->file);
+	if (ret)
+		return ret;
+
+	ret = overwriteenv("IMAGEOUTFILE", imageoutfile(image));
+	if (ret)
+		return ret;
+
+	ret = overwriteenv("IMAGENAME", image->name);
+	if (ret)
+		return ret;
+
+	ret = overwriteenv("IMAGESIZE", sizestr);
+	if (ret)
+		return ret;
+
+	ret = overwriteenv("IMAGEMOUNTPOINT", image->mountpoint);
+	if (ret)
+		return ret;
+
+	ret = overwriteenv("IMAGEMOUNTPATH", image->empty ? NULL : mountpath(image));
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 /*
  * generate the images. Calls ->generate function for each
  * image, recursively calls itself for resolving dependencies
@@ -229,6 +300,10 @@ static int image_generate(struct image *image)
 			return ret;
 		}
 	}
+
+	ret = setenv_image(image);
+	if (ret)
+		return ret;
 
 	if (image->exec_pre) {
 		ret = systemp(image, "%s", image->exec_pre);
@@ -424,7 +499,18 @@ static int collect_mountpoints(void)
 {
 	struct image *image;
 	struct mountpoint *mp;
-	int ret;
+	int ret, need_mtime_fixup = 0, need_root = 0;
+
+	list_for_each_entry(image, &images, list) {
+		if (!(image->empty || image->handler->no_rootpath || image->srcpath)) {
+			need_root = 1;
+			break;
+		}
+	}
+	if (!need_root) {
+		disable_rootpath();
+		return 0;
+	}
 
 	add_root_mountpoint();
 
@@ -456,24 +542,30 @@ static int collect_mountpoints(void)
 		ret = systemp(NULL, "chown --reference=\"%s\" \"%s/root/%s\"", mp->mountpath, tmppath(), mp->path);
 		if (ret)
 			return ret;
+		need_mtime_fixup = 1;
 	}
 
 	/*
 	 * After the mv/mkdir of the mountpoints the timestamps of the
 	 * mountpoint and all parent dirs are changed. Fix that here.
 	 */
-	ret = systemp(NULL,
-		      "find '%s/root' -depth -type d -printf '%%P\\0' | xargs -0 -I {} touch -r '%s/{}' '%s/root/{}'",
-		      tmppath(), rootpath(), tmppath());
-	if (ret)
-		return ret;
+	if (need_mtime_fixup)
+		ret = systemp(NULL,
+			      "find '%s/root' -depth -type d -printf '%%P\\0' | xargs -0 -I {} touch -r '%s/{}' '%s/root/{}'",
+			      tmppath(), rootpath(), tmppath());
 
-	return 0;
+	return ret;
 }
 
 const char *mountpath(const struct image *image)
 {
+	if(image->srcpath)
+		return image->srcpath;
+
 	struct mountpoint *mp;
+
+	if (image->empty || image->handler->no_rootpath)
+		return "";
 
 	mp = image->mp;
 	if (!mp)
@@ -530,74 +622,6 @@ static cfg_opt_t top_opts[] = {
 	CFG_FUNC("include", &cfg_include),
 	CFG_END()
 };
-
-static int overwriteenv(const char *name, const char *value)
-{
-	int ret;
-
-	ret = setenv(name, value ? : "", 1);
-	if (ret)
-		return -errno;
-
-	return 0;
-}
-
-static int setenv_paths(void)
-{
-	int ret;
-
-	ret = overwriteenv("OUTPUTPATH", imagepath());
-	if (ret)
-		return ret;
-
-	ret = overwriteenv("INPUTPATH", inputpath());
-	if (ret)
-		return ret;
-
-	ret = overwriteenv("ROOTPATH", rootpath());
-	if (ret)
-		return ret;
-
-	ret = overwriteenv("TMPPATH", tmppath());
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
-static int setenv_image(const struct image *image)
-{
-	int ret;
-	char sizestr[20];
-
-	snprintf(sizestr, sizeof(sizestr), "%llu", image->size);
-
-	ret = overwriteenv("IMAGE", image->file);
-	if (ret)
-		return ret;
-
-	ret = overwriteenv("IMAGEOUTFILE", imageoutfile(image));
-	if (ret)
-		return ret;
-
-	ret = overwriteenv("IMAGENAME", image->name);
-	if (ret)
-		return ret;
-
-	ret = overwriteenv("IMAGESIZE", sizestr);
-	if (ret)
-		return ret;
-
-	ret = overwriteenv("IMAGEMOUNTPOINT", image->mountpoint);
-	if (ret)
-		return ret;
-
-	ret = overwriteenv("IMAGEMOUNTPATH", image->empty ? NULL : mountpath(image));
-	if (ret)
-		return ret;
-
-	return 0;
-}
 
 #ifdef HAVE_SEARCHPATH
 static int add_searchpath(cfg_t *cfg, const char *dir)
@@ -708,6 +732,21 @@ int main(int argc, char *argv[])
 	/* again, with config file this time */
 	set_config_opts(argc, argv, cfg);
 
+	str = get_opt("configdump");
+	if (str) {
+		FILE *dump;
+
+		dump = (strcmp(str, "-")) ? fopen(str, "w") : stdout;
+		if (!dump) {
+			error("could not open dump file %s: %s", str, strerror(errno));
+			ret = -1;
+			goto cleanup;
+		}
+		cfg_print(cfg, dump);
+		if (dump != stdout)
+			fclose(dump);
+	}
+
 	check_tmp_path();
 
 	ret = systemp(NULL, "rm -rf \"%s\"/*", tmppath());
@@ -727,6 +766,7 @@ int main(int argc, char *argv[])
 		image->name = cfg_getstr(imagesec, "name");
 		image->size = cfg_getint_suffix_percent(imagesec, "size",
 				&image->size_is_percent);
+		image->srcpath = cfg_getstr(imagesec, "srcpath");
 		image->mountpoint = cfg_getstr(imagesec, "mountpoint");
 		image->empty = cfg_getbool(imagesec, "empty");
 		image->temporary = cfg_getbool(imagesec, "temporary");
@@ -740,6 +780,10 @@ int main(int argc, char *argv[])
 					image->file);
 		if (image->mountpoint && *image->mountpoint == '/')
 			image->mountpoint++;
+		if (image->srcpath && image->mountpoint && (strlen(image->mountpoint) > 0)) {
+			image_error(image, "Cannot specify both srcpath and mountpoint at the same time.");
+			goto cleanup;
+		}
 		str = cfg_getstr(imagesec, "flashtype");
 		if (str)
 			image->flash_type = flash_type_get(str);
@@ -780,6 +824,11 @@ int main(int argc, char *argv[])
 			list_add_tail(&child->list, &images);
 			child->file = part->image;
 			child->handler = &file_handler;
+			if (child->handler->parse) {
+				ret = child->handler->parse(child, child->imagesec);
+				if (ret)
+					goto cleanup;
+			}
 			parse_holes(child, part->cfg);
 		}
 	}
@@ -808,10 +857,6 @@ int main(int argc, char *argv[])
 		goto cleanup;
 
 	list_for_each_entry(image, &images, list) {
-		ret = setenv_image(image);
-		if (ret)
-			goto cleanup;
-
 		ret = image_generate(image);
 		if (ret) {
 			image_error(image, "failed to generate %s\n", image->file);

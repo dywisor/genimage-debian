@@ -22,7 +22,9 @@ genimage_SOURCES = \
 	image-cpio.c \
 	image-cramfs.c \
 	image-ext2.c \
+	image-f2fs.c \
 	image-file.c \
+	image-fip.c \
 	image-fit.c \
 	image-flash.c \
 	image-hd.c \
@@ -48,7 +50,8 @@ noinst_HEADERS = \
 	list.h
 
 EXTRA_DIST += \
-	test/basic-images.test \
+	$(TESTS) \
+	test/test-setup.sh \
 	test/cpio.config \
 	test/cramfs.config \
 	test/exec-check.sh \
@@ -66,6 +69,8 @@ EXTRA_DIST += \
 	test/ext4.config \
 	test/ext4test.0.dump \
 	test/ext4test.1.dump \
+	test/f2fs.config \
+	test/fip.config \
 	test/fit.its \
 	test/fit.config \
 	test/flash-types.config \
@@ -96,6 +101,8 @@ EXTRA_DIST += \
 	test/hdimage-fail5.config \
 	test/hdimage-fail6.config \
 	test/hdimage-fail7.config \
+	test/hdimage-nopart.config \
+	test/hdimage-nopart.hexdump \
 	test/include-aaa.fdisk \
 	test/include-bbb.fdisk \
 	test/include-ccc.fdisk \
@@ -120,7 +127,9 @@ EXTRA_DIST += \
 	test/squashfs.config \
 	test/tar.config \
 	test/test.raucb.info \
+	test/test.raucb.info.new \
 	test/test2.raucb.info \
+	test/test2.raucb.info.new \
 	test/ubi.config \
 	test/ubifs.config \
 	test/vfat.config
@@ -132,11 +141,16 @@ TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) \
 TEST_LOG_COMPILER = fakeroot
 
 TESTS = \
-	test/basic-images.test
+	test/genimage.test \
+	test/ext.test \
+	test/filesystem.test \
+	test/flash.test \
+	test/hdimage.test \
+	test/misc.test
 
 # when "make clean" runs
 CLEANFILES = \
-	test-results/basic-images.test*.counts
+	test-results/*.test*.counts
 
 # when "make distclean" runs
 DISTCLEAN = \
