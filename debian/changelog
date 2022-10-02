@@ -1,3 +1,9 @@
+genimage (16-1) unstable; urgency=low
+
+  * Update to release version 16
+
+ -- André Erdmann <dywi@mailerd.de>  Tue, 02 Oct 2022 17:37:00 +0200
+
 genimage (15-1) unstable; urgency=low
 
   * Initial import

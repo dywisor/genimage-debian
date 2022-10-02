@@ -16,7 +16,7 @@ cd genimage-debian
 git pull --ff-only
 git fetch upstream
 
-git clean -d --force
+git clean -d -x --force
 gbp buildpackage -uc -us
 ```
 
